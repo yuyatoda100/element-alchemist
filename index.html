@@ -2,669 +2,593 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>エレメントアルケミスト - Element Alchemist</title>
-    <!-- Pixi.js v7 for WebGL rendering -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.3.2/pixi.min.js"></script>
+    <title>エレメントアルケミスト（仮）</title>
     <style>
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            user-select: none;
-            -webkit-user-select: none;
+        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #1a1a1a; color: #eee; overflow: hidden; }
+        
+        /* Top Status Bar */
+        #top-bar {
+            height: 40px; background: #2a2a35; border-bottom: 2px solid #444;
+            display: flex; align-items: center; justify-content: space-between; padding: 0 16px; font-weight: bold;
         }
-        body, html {
-            width: 100%;
-            height: 100%;
-            overflow: hidden;
-            background-color: #0d0905;
-            font-family: 'Georgia', 'Times New Roman', serif;
-            color: #d8c29d;
+        .status-item { display: flex; align-items: center; gap: 8px; }
+        .mana-val { color: #4facfe; }
+        .score-val { color: #ff007f; }
+
+        /* Main Container */
+        #main-container { display: flex; height: calc(100vh - 80px); }
+
+        /* Left Palette / Sidebar */
+        #left-sidebar {
+            width: 260px; background: #22222c; border-right: 2px solid #444;
+            display: flex; flex-direction: column; gap: 10px; padding: 12px; overflow-y: auto;
+        }
+        .section-title { font-size: 14px; color: #aaa; border-bottom: 1px solid #444; padding-bottom: 4px; margin-top: 8px; }
+        .btn {
+            background: #3a3a4a; color: #fff; border: 1px solid #555; padding: 8px 12px;
+            border-radius: 4px; cursor: pointer; text-align: left; font-size: 13px; transition: background 0.2s;
+        }
+        .btn:hover { background: #4a4a5a; }
+        .btn.active { border-color: #00d2ff; background: #2a4a6a; }
+
+        /* Canvas View */
+        #canvas-container { flex: 1; position: relative; background: #121216; overflow: hidden; }
+        canvas#gameCanvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
+
+        /* MiniMap Overlay */
+        #minimap-container {
+            position: absolute; top: 12px; right: 12px;
+            width: 180px; height: 180px;
+            background: rgba(20, 20, 28, 0.85);
+            border: 2px solid #555; border-radius: 8px;
+            overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            pointer-events: none;
+        }
+        #minimapCanvas { width: 100%; height: 100%; }
+
+        /* Right Panel */
+        #right-sidebar {
+            width: 240px; background: #22222c; border-left: 2px solid #444; padding: 12px; font-size: 13px;
         }
 
-        #game-container {
-            position: relative;
-            width: 100vw;
-            height: 100vh;
+        /* Bottom Hotbar */
+        #bottom-bar {
+            height: 40px; background: #2a2a35; border-top: 2px solid #444;
+            display: flex; align-items: center; justify-content: center; gap: 12px;
         }
-
-        canvas {
-            display: block;
-            width: 100%;
-            height: 100%;
+        .hotbar-slot {
+            padding: 4px 12px; background: #333; border: 1px solid #555; border-radius: 4px; font-size: 12px;
         }
-
-        /* 羊皮紙風 UI パネル */
-        .parchment-panel {
-            background: rgba(22, 16, 11, 0.88);
-            border: 2px solid #8c6a43;
-            border-radius: 6px;
-            box-shadow: inset 0 0 15px rgba(0,0,0,0.8), 0 8px 20px rgba(0,0,0,0.7);
-            backdrop-filter: blur(4px);
-        }
-
-        /* 画面上部 資源・ステータスバー */
-        #top-resource-bar {
-            position: absolute;
-            top: 12px;
-            left: 12px;
-            display: flex;
-            align-items: center;
-            gap: 16px;
-            padding: 8px 16px;
-            z-index: 10;
-        }
-
-        .resource-item {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            font-size: 13px;
-            font-weight: bold;
-        }
-
-        .resource-icon {
-            width: 22px;
-            height: 22px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 11px;
-            color: #fff;
-            text-shadow: 0 0 2px #000;
-        }
-
-        /* 画面右上 目標パネル */
-        #objective-panel {
-            position: absolute;
-            top: 12px;
-            right: 12px;
-            width: 260px;
-            padding: 12px;
-            z-index: 10;
-        }
-
-        .panel-title {
-            font-size: 14px;
-            font-weight: bold;
-            color: #f1c40f;
-            border-bottom: 1px solid #6b4d2b;
-            padding-bottom: 4px;
-            margin-bottom: 8px;
-            display: flex;
-            justify-content: space-between;
-        }
-
-        .task-list {
-            font-size: 12px;
-            line-height: 1.6;
-        }
-
-        .task-item {
-            display: flex;
-            justify-content: space-between;
-            color: #bfa888;
-        }
-        .task-item.done {
-            color: #2ecc71;
-        }
-
-        /* 画面左下 構築ホットバー & ツール */
-        #controls-panel {
-            position: absolute;
-            bottom: 12px;
-            left: 12px;
-            z-index: 10;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-
-        .hotbar {
-            display: flex;
-            gap: 6px;
-            padding: 6px;
-        }
-
-        .hotbar-btn {
-            width: 48px;
-            height: 48px;
-            background: rgba(35, 25, 17, 0.9);
-            border: 1px solid #7c5c37;
-            border-radius: 4px;
-            color: #d8c29d;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            font-size: 10px;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        .hotbar-btn:hover {
-            border-color: #f1c40f;
-            transform: translateY(-2px);
-        }
-        .hotbar-btn.active {
-            border: 2px solid #f1c40f;
-            background: rgba(107, 77, 43, 0.6);
-            color: #fff;
-        }
-
-        .hotbar-key {
-            position: absolute;
-            top: 2px;
-            left: 4px;
-            font-size: 9px;
-            color: #8c6a43;
-        }
-
-        /* プレイヤー操作の操作ガイド */
-        #guide-overlay {
-            position: absolute;
-            bottom: 12px;
-            right: 12px;
-            padding: 10px 14px;
-            font-size: 12px;
-            z-index: 10;
-            line-height: 1.5;
-        }
-
-        /* 勝利オーバーレイ */
-        #victory-modal {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 480px;
-            padding: 24px;
-            text-align: center;
-            z-index: 100;
-            display: none;
-            background: rgba(15, 10, 5, 0.95);
-            border: 3px solid #f1c40f;
-            box-shadow: 0 0 40px rgba(241, 196, 15, 0.5);
+        .resource-list {
+            margin-top: 8px; line-height: 1.6;
         }
     </style>
 </head>
 <body>
-    <div id="game-container">
-        <!-- 資源インベントリバー -->
-        <div id="top-resource-bar" class="parchment-panel">
-            <div class="resource-item">
-                <div class="resource-icon" style="background:#e74c3c;">🜂</div>
-                <span>火: <span id="res-fire">0</span></span>
-            </div>
-            <div class="resource-item">
-                <div class="resource-icon" style="background:#3498db;">🜄</div>
-                <span>水: <span id="res-water">0</span></span>
-            </div>
-            <div class="resource-item">
-                <div class="resource-icon" style="background:#795548;">🜃</div>
-                <span>土: <span id="res-earth">0</span></span>
-            </div>
-            <div class="resource-item">
-                <div class="resource-icon" style="background:#f1c40f;">🜁</div>
-                <span>風: <span id="res-wind">0</span></span>
-            </div>
-            <div style="margin-left: 20px; border-left: 1px solid #555; padding-left: 15px; font-size: 12px;">
-                美観度: <span id="score-val" style="color:#f1c40f; font-weight:bold;">0</span>pt
-            </div>
-        </div>
 
-        <!-- 目標パネル -->
-        <div id="objective-panel" class="parchment-panel">
-            <div class="panel-title">
-                <span>錬金術の試練</span>
-                <span id="rank-val" style="background:#f1c40f; color:#000; padding:0 6px; border-radius:3px; font-size:11px;">Rank D</span>
-            </div>
-            <div class="task-list">
-                <div id="task-1" class="task-item"><span>・川/火山に採取陣を配置</span><span>未判定</span></div>
-                <div id="task-2" class="task-item"><span>・導管で中央へエレメント運搬</span><span>未判定</span></div>
-                <div id="task-3" class="task-item"><span>・調合陣で蒸気/溶岩を作成</span><span>未判定</span></div>
-                <div id="task-4" class="task-item"><span>・賢者の石を錬成する</span><span>0/1</span></div>
-            </div>
+    <!-- Top Status Bar -->
+    <div id="top-bar">
+        <div class="status-item">
+            <span>Mana:</span>
+            <span id="mana-display" class="mana-val">100 / 500 (+0/s)</span>
         </div>
-
-        <!-- コントロールホットバー -->
-        <div id="controls-panel">
-            <div class="hotbar parchment-panel">
-                <button id="btn-move" class="hotbar-btn active" onclick="setMode('move')">
-                    <span style="font-size:16px;">🚶</span>
-                    <span>移動</span>
-                </button>
-                <button id="btn-extractor" class="hotbar-btn" onclick="setMode('extractor')">
-                    <span style="font-size:16px;">⛏️</span>
-                    <span>採取陣</span>
-                </button>
-                <button id="btn-relay" class="hotbar-btn" onclick="setMode('relay')">
-                    <span style="font-size:16px;">◇</span>
-                    <span>中継陣</span>
-                </button>
-                <button id="btn-mixer" class="hotbar-btn" onclick="setMode('mixer')">
-                    <span style="font-size:16px;">△</span>
-                    <span>調合陣</span>
-                </button>
-                <button id="btn-connect" class="hotbar-btn" onclick="setMode('connect')">
-                    <span style="font-size:16px;">⚡</span>
-                    <span>導管(C)</span>
-                </button>
-                <button id="btn-delete" class="hotbar-btn" onclick="setMode('delete')">
-                    <span style="font-size:16px;">🗑️</span>
-                    <span>撤去(R)</span>
-                </button>
-            </div>
-        </div>
-
-        <!-- 操作用ガイド -->
-        <div id="guide-overlay" class="parchment-panel">
-            <div><strong>【操作方法】</strong></div>
-            <div>移動: <strong>WASD</strong> キー</div>
-            <div>ズーム: <strong>マウスホイール</strong></div>
-            <div>アクション: 自然地形に近寄り、採取陣・導管を設置</div>
-        </div>
-
-        <!-- クリアダイアログ -->
-        <div id="victory-modal" class="parchment-panel">
-            <h2 style="color:#f1c40f; margin-bottom:10px;">Solve et Coagula</h2>
-            <p style="font-size:14px; line-height:1.6; margin-bottom:15px;">
-                見事に賢者の石の調合に成功しました！<br>
-                星の霊脈が共鳴し、完璧な真理の魔法陣が完成しました。
-            </p>
-            <button onclick="document.getElementById('victory-modal').style.display='none'" style="padding:8px 20px; background:#f1c40f; border:none; color:#000; font-weight:bold; cursor:pointer; border-radius:4px;">
-                自由構築（サンドボックス）を続ける
-            </button>
+        <div class="status-item">
+            <span>Symmetry Score:</span>
+            <span id="score-display" class="score-val">0 (Rank F)</span>
         </div>
     </div>
 
+    <!-- Main Container -->
+    <div id="main-container">
+        <!-- Left Sidebar -->
+        <div id="left-sidebar">
+            <div class="section-title">操作モード</div>
+            <button class="btn" id="btn-select" onclick="selectTool('select')">選択 / アクション</button>
+            <button class="btn" id="btn-collector" onclick="selectTool('collector')">採取陣 [2] (Req: 地×5, 火×2)</button>
+            <button class="btn" id="btn-line" onclick="selectTool('line')">転送マナライン [1 / C] (Req: 風×2)</button>
+            <button class="btn" id="btn-mixer" onclick="selectTool('mixer')">調合陣 [3] (Req: 水×10, 溶岩×5)</button>
+            <button class="btn" id="btn-relay" onclick="selectTool('relay')">中継陣 [4] (Req: 地×3, 水×3)</button>
+            <button class="btn" id="btn-delete" onclick="selectTool('delete')">削除モード [R]</button>
+
+            <div class="section-title">研究 (Research) [T]</div>
+            <button class="btn" onclick="research('tech1')">基礎採取効率化 (Cost: 50 Mana)</button>
+            <button class="btn" onclick="research('tech2')">マナ伝導最適化 (Cost: 100 Mana)</button>
+
+            <div class="section-title">表示・対称モード [M / G]</div>
+            <button class="btn" onclick="toggleSymmetry()">対称モード [M]: <span id="sym-mode">Off</span></button>
+            <button class="btn" onclick="toggleGrid()">グリッド [G]: <span id="grid-mode">Cartesian</span></button>
+        </div>
+
+        <!-- Main Canvas View -->
+        <div id="canvas-container">
+            <canvas id="gameCanvas"></canvas>
+            
+            <!-- ミニマップオーバーレイ -->
+            <div id="minimap-container">
+                <canvas id="minimapCanvas" width="180" height="180"></canvas>
+            </div>
+        </div>
+
+        <!-- Right Detail Panel -->
+        <div id="right-sidebar">
+            <div class="section-title">所持エレメント</div>
+            <div class="resource-list" id="element-display">
+                🜄 水: 10<br>
+                🜂 火: 10<br>
+                🜃 土: 20<br>
+                🜁 風: 10<br>
+                🌋 溶岩: 5
+            </div>
+
+            <div class="section-title" style="margin-top: 16px;">ノード詳細情報</div>
+            <div id="node-info">ノードを選択してください</div>
+        </div>
+    </div>
+
+    <!-- Bottom Hotbar -->
+    <div id="bottom-bar">
+        <div class="hotbar-slot">WASD: プレイヤー移動</div>
+        <div class="hotbar-slot">1: マナライン</div>
+        <div class="hotbar-slot">2: 採取陣</div>
+        <div class="hotbar-slot">3: 調合陣</div>
+        <div class="hotbar-slot">4: 中継陣</div>
+        <div class="hotbar-slot">[R]: 削除</div>
+        <div class="hotbar-slot">点線内のみ設置可能</div>
+    </div>
+
     <script>
-        // --- データ構造 ---
-        const ELEMENTS = {
-            1: { id: 1, name: "火", symbol: "🜂", color: 0xe74c3c, bgHex: "#e74c3c" },
-            2: { id: 2, name: "水", symbol: "🜄", color: 0x3498db, bgHex: "#3498db" },
-            3: { id: 3, name: "土", symbol: "🜃", color: 0x795548, bgHex: "#795548" },
-            4: { id: 4, name: "風", symbol: "🜁", color: 0xf1c40f, bgHex: "#f1c40f" },
-            5: { id: 5, name: "蒸気", symbol: "♨", color: 0xecf0f1, bgHex: "#ecf0f1" },
-            6: { id: 6, name: "溶岩", symbol: "🌋", color: 0xd35400, bgHex: "#d35400" },
-            31: { id: 31, name: "賢者の石", symbol: "☸", color: 0xff0055, bgHex: "#ff0055" }
+        // --- 状態管理 (State Management) ---
+        const gameState = {
+            mana: 100,
+            maxMana: 500,
+            manaRate: 0,
+            elements: { Water: 10, Fire: 10, Earth: 20, Wind: 10, Lava: 5 },
+            nodes: [],
+            lines: [],
+            resourceNodes: [],
+            selectedTool: 'select',
+            symmetryAxes: 1,
+            gridType: 'Cartesian',
+            connectingNode: null,
+            worldSize: 3000, // ワールド全体の幅・高さ (-1500 ~ +1500)
+            player: {
+                x: 0,
+                y: 0,
+                speed: 3.5,
+                reachRadius: 180
+            },
+            camera: { x: 0, y: 0, zoom: 1 },
+            keysPressed: {}
         };
 
-        const RECIPES = [
-            { in: [1, 2], out: 5 }, // 火 + 水 -> 蒸気
-            { in: [1, 3], out: 6 }, // 火 + 土 -> 溶岩
-            { in: [5, 6], out: 31 } // 蒸気 + 溶岩 -> 賢者の石 (プロトタイプ簡略化版)
-        ];
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const minimapCanvas = document.getElementById('minimapCanvas');
+        const minimapCtx = minimapCanvas.getContext('2d');
 
-        // 地形リソース
-        const TERRAIN_TYPES = {
-            RIVER: { name: "水脈・川", elementId: 2, color: 0x2980b9 },
-            VOLCANO: { name: "火山・溶岩", elementId: 1, color: 0xc0392b },
-            MOUNTAIN: { name: "山脈・土壌", elementId: 3, color: 0x5d4037 },
-            WIND_VALLEY: { name: "風の谷", elementId: 4, color: 0xd4ac0d }
-        };
-
-        // --- アプリケーション状態 ---
-        let app, worldContainer;
-        let terrainGraphics, bgAlchemyGraphics, lineGraphics, particleGraphics, nodeContainer, playerGraphics;
-        
-        let player = { x: 0, y: 0, radius: 18, speed: 4, reachRadius: 180 };
-        let keys = { w: false, a: false, s: false, d: false };
-        let currentMode = 'move'; // 'move', 'extractor', 'relay', 'mixer', 'connect', 'delete'
-        
-        let terrainZones = [];
-        let nodes = [];
-        let lines = [];
-        let particles = [];
-        let inventory = { 1: 0, 2: 0, 3: 0, 4: 0 };
-
-        let connectingStartNode = null;
-        let gameCleared = false;
-
-        window.onload = function() {
-            const container = document.getElementById('game-container');
-            app = new PIXI.Application({
-                width: container.clientWidth,
-                height: container.clientHeight,
-                backgroundColor: 0x0d0905,
-                resolution: window.devicePixelRatio || 1,
-                autoDensity: true,
-                antialias: true
-            });
-            container.appendChild(app.view);
-
-            worldContainer = new PIXI.Container();
-            app.stage.addChild(worldContainer);
-
-            // 各種描画レイヤー
-            bgAlchemyGraphics = new PIXI.Graphics();
-            terrainGraphics = new PIXI.Graphics();
-            lineGraphics = new PIXI.Graphics();
-            particleGraphics = new PIXI.Graphics();
-            nodeContainer = new PIXI.Container();
-            playerGraphics = new PIXI.Graphics();
-
-            worldContainer.addChild(bgAlchemyGraphics);
-            worldContainer.addChild(terrainGraphics);
-            worldContainer.addChild(lineGraphics);
-            worldContainer.addChild(particleGraphics);
-            worldContainer.addChild(nodeContainer);
-            worldContainer.addChild(playerGraphics);
-
-            generateTerrain();
-            setupInitialNodes();
-            setupEvents();
-
-            app.ticker.add((delta) => {
-                updatePlayer(delta);
-                updateGameLogic(delta);
-                renderScene();
-            });
-        };
-
-        // --- 地形＆初期配置の生成 ---
-        function generateTerrain() {
-            // 川・水脈
-            terrainZones.push({ type: TERRAIN_TYPES.RIVER, x: -400, y: -200, radius: 110 });
-            terrainZones.push({ type: TERRAIN_TYPES.RIVER, x: -500, y: -100, radius: 90 });
-            // 火山
-            terrainZones.push({ type: TERRAIN_TYPES.VOLCANO, x: 450, y: -250, radius: 120 });
-            // 山脈
-            terrainZones.push({ type: TERRAIN_TYPES.MOUNTAIN, x: -350, y: 350, radius: 130 });
-            // 風の谷
-            terrainZones.push({ type: TERRAIN_TYPES.WIND_VALLEY, x: 400, y: 300, radius: 100 });
+        function resizeCanvas() {
+            canvas.width = canvas.parentElement.clientWidth;
+            canvas.height = canvas.parentElement.clientHeight;
         }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
 
-        function setupInitialNodes() {
-            // 中央の大錬成陣（最終合成ハブ）
-            createNode(0, 0, 'mixer', null);
+        // --- マップ自然地形（エレメント資源）のランダム生成 ---
+        const RESOURCE_TYPES = {
+            Water: { name: '水脈・川', symbol: '🜄', color: 'rgba(0, 150, 255, 0.4)', borderColor: '#0096ff', miniColor: '#0096ff' },
+            Fire:  { name: '火山・溶岩地帯', symbol: '🜂', color: 'rgba(255, 60, 0, 0.4)', borderColor: '#ff3c00', miniColor: '#ff3c00' },
+            Earth: { name: '山脈・岩盤', symbol: '🜃', color: 'rgba(139, 69, 19, 0.4)', borderColor: '#8b4513', miniColor: '#8b4513' },
+            Wind:  { name: '風の谷・湧昇気流', symbol: '🜁', color: 'rgba(230, 230, 50, 0.4)', borderColor: '#e6e632', miniColor: '#e6e632' }
+        };
+
+        function generateNaturalTerrain() {
+            const types = ['Water', 'Fire', 'Earth', 'Wind'];
+            const halfSize = gameState.worldSize / 2 - 100;
+            for (let i = 0; i < 35; i++) {
+                const type = types[Math.floor(Math.random() * types.length)];
+                gameState.resourceNodes.push({
+                    id: 'res_' + i,
+                    type: type,
+                    x: (Math.random() - 0.5) * halfSize * 2,
+                    y: (Math.random() - 0.5) * halfSize * 2,
+                    radius: 35 + Math.random() * 25
+                });
+            }
         }
+        generateNaturalTerrain();
 
-        function createNode(x, y, type, elementId = null) {
-            const node = {
-                id: Date.now() + Math.random(),
-                x: x,
-                y: y,
-                type: type, // 'extractor', 'relay', 'mixer'
-                elementId: elementId,
-                inputs: {},
-                gfx: new PIXI.Graphics(),
-                textGfx: new PIXI.Text('', { fontSize: 16, fill: 0xffffff })
+        // 初期コアプラント設置
+        gameState.nodes.push({ id: 0, type: 'core', x: 0, y: 0, manaCost: 0, name: '錬金炉（コアプラント）' });
+
+        // --- 座標変換 ---
+        function screenToWorld(sx, sy) {
+            const cx = canvas.width / 2;
+            const cy = canvas.height / 2;
+            return {
+                x: (sx - cx) / gameState.camera.zoom - gameState.camera.x,
+                y: (sy - cy) / gameState.camera.zoom - gameState.camera.y
             };
-
-            node.gfx.interactive = true;
-            node.gfx.buttonMode = true;
-            node.gfx.on('pointerdown', (e) => onNodeClick(e, node));
-
-            nodeContainer.addChild(node.gfx);
-            nodeContainer.addChild(node.textGfx);
-            nodes.push(node);
-            return node;
         }
 
-        // --- プレイヤー移動とカメラ追従 ---
-        function updatePlayer(delta) {
-            let dx = 0, dy = 0;
-            if (keys.w) dy -= 1;
-            if (keys.s) dy += 1;
-            if (keys.a) dx -= 1;
-            if (keys.d) dx += 1;
+        // --- UI & ツール操作 ---
+        function selectTool(tool) {
+            gameState.selectedTool = tool;
+            gameState.connectingNode = null;
+            document.querySelectorAll('#left-sidebar .btn').forEach(b => b.classList.remove('active'));
+            const btn = document.getElementById(`btn-${tool}`);
+            if (btn) btn.classList.add('active');
+        }
+
+        function toggleSymmetry() {
+            const modes = [1, 2, 4, 8];
+            const idx = (modes.indexOf(gameState.symmetryAxes) + 1) % modes.length;
+            gameState.symmetryAxes = modes[idx];
+            document.getElementById('sym-mode').innerText = gameState.symmetryAxes === 1 ? 'Off' : `${gameState.symmetryAxes}軸`;
+        }
+
+        function toggleGrid() {
+            gameState.gridType = gameState.gridType === 'Cartesian' ? 'Polar' : 'Cartesian';
+            document.getElementById('grid-mode').innerText = gameState.gridType;
+        }
+
+        function research(techId) {
+            if (techId === 'tech1' && gameState.mana >= 50) {
+                gameState.mana -= 50;
+                alert('研究完了: 基礎採取効率化 (+50% 効率)');
+            } else if (techId === 'tech2' && gameState.mana >= 100) {
+                gameState.mana -= 100;
+                alert('研究完了: マナ伝導最適化');
+            } else {
+                alert('マナが足りません！');
+            }
+        }
+
+        // --- 入力イベント ---
+        canvas.addEventListener('mousedown', (e) => {
+            if (e.button !== 0) return;
+
+            const rect = canvas.getBoundingClientRect();
+            const sx = e.clientX - rect.left;
+            const sy = e.clientY - rect.top;
+            const worldPos = screenToWorld(sx, sy);
+
+            const distToPlayer = Math.hypot(worldPos.x - gameState.player.x, worldPos.y - gameState.player.y);
+            if (distToPlayer > gameState.player.reachRadius) {
+                return;
+            }
+
+            const clickedNode = gameState.nodes.find(n => Math.hypot(n.x - worldPos.x, n.y - worldPos.y) < 20);
+
+            if (gameState.selectedTool === 'line') {
+                if (clickedNode) {
+                    if (!gameState.connectingNode) {
+                        gameState.connectingNode = clickedNode;
+                    } else if (gameState.connectingNode !== clickedNode) {
+                        if (gameState.elements.Wind >= 2) {
+                            gameState.elements.Wind -= 2;
+                            gameState.lines.push({ from: gameState.connectingNode, to: clickedNode, manaCost: 0.1 });
+                            gameState.connectingNode = null;
+                        } else {
+                            alert('クラフト素材不足: 風のエレメント × 2 が必要です');
+                        }
+                    }
+                }
+            } else if (['collector', 'mixer', 'relay'].includes(gameState.selectedTool)) {
+                createNode(gameState.selectedTool, worldPos.x, worldPos.y);
+            } else if (gameState.selectedTool === 'delete' && clickedNode && clickedNode.type !== 'core') {
+                gameState.nodes = gameState.nodes.filter(n => n !== clickedNode);
+                gameState.lines = gameState.lines.filter(l => l.from !== clickedNode && l.to !== clickedNode);
+            } else if (clickedNode) {
+                document.getElementById('node-info').innerHTML = `
+                    <b>${clickedNode.name}</b><br>
+                    位置: (${Math.round(clickedNode.x)}, ${Math.round(clickedNode.y)})<br>
+                    駆動マナ: ${clickedNode.manaCost} Mana/s
+                    ${clickedNode.harvestType ? `<br>採取対象: ${RESOURCE_TYPES[clickedNode.harvestType].name}` : ''}
+                `;
+            }
+        });
+
+        // ホイールズーム
+        canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const zoomFactor = 1.1;
+            if (e.deltaY < 0) {
+                gameState.camera.zoom = Math.min(2.5, gameState.camera.zoom * zoomFactor);
+            } else {
+                gameState.camera.zoom = Math.max(0.4, gameState.camera.zoom / zoomFactor);
+            }
+        }, { passive: false });
+
+        // キーボード操作（WASD移動）
+        window.addEventListener('keydown', (e) => {
+            gameState.keysPressed[e.key.toLowerCase()] = true;
+
+            if (e.key === '1') selectTool('line');
+            if (e.key === '2') selectTool('collector');
+            if (e.key === '3') selectTool('mixer');
+            if (e.key === '4') selectTool('relay');
+            if (e.key.toLowerCase() === 'r') selectTool('delete');
+            if (e.key.toLowerCase() === 'c') selectTool('line');
+            if (e.key.toLowerCase() === 'm') toggleSymmetry();
+            if (e.key.toLowerCase() === 'g') toggleGrid();
+        });
+
+        window.addEventListener('keyup', (e) => {
+            gameState.keysPressed[e.key.toLowerCase()] = false;
+        });
+
+        function handlePlayerMovement() {
+            let dx = 0;
+            let dy = 0;
+
+            if (gameState.keysPressed['w']) dy -= 1;
+            if (gameState.keysPressed['s']) dy += 1;
+            if (gameState.keysPressed['a']) dx -= 1;
+            if (gameState.keysPressed['d']) dx += 1;
 
             if (dx !== 0 && dy !== 0) {
                 dx *= 0.7071;
                 dy *= 0.7071;
             }
 
-            player.x += dx * player.speed * delta;
-            player.y += dy * player.speed * delta;
+            gameState.player.x += dx * gameState.player.speed;
+            gameState.player.y += dy * gameState.player.speed;
 
-            // カメラを中心追従
-            worldContainer.x = app.screen.width / 2 - player.x;
-            worldContainer.y = app.screen.height / 2 - player.y;
+            // カメラ追従
+            gameState.camera.x = -gameState.player.x;
+            gameState.camera.y = -gameState.player.y;
         }
 
-        // --- ゲーム進行・流体ロジック ---
-        function updateGameLogic(delta) {
-            // 採取陣からの自動生産
-            nodes.forEach(node => {
-                if (node.type === 'extractor' && node.elementId) {
-                    if (Math.random() < 0.03) {
-                        inventory[node.elementId] = (inventory[node.elementId] || 0) + 1;
-                        updateUI();
+        // 施設・採取陣の設置
+        function createNode(type, x, y) {
+            let harvestType = null;
 
-                        // 導管へ送出
-                        lines.filter(l => l.from === node).forEach(line => {
-                            particles.push({
-                                line: line,
-                                progress: 0,
-                                speed: 0.015,
-                                elementId: node.elementId
-                            });
-                        });
-                    }
+            if (type === 'collector') {
+                const res = gameState.resourceNodes.find(r => Math.hypot(r.x - x, r.y - y) < r.radius);
+                if (!res) {
+                    alert('採取陣は自然地形（水脈・火山・山脈・風の谷）の上にしか設置できません！');
+                    return;
+                }
+                harvestType = res.type;
+            }
+
+            let costCheck = false;
+            let nodeData = { x, y, type, harvestType };
+
+            if (type === 'collector' && gameState.elements.Earth >= 5 && gameState.elements.Fire >= 2) {
+                gameState.elements.Earth -= 5;
+                gameState.elements.Fire -= 2;
+                nodeData.name = `採取陣 (${RESOURCE_TYPES[harvestType].name})`;
+                nodeData.manaCost = 2;
+                costCheck = true;
+            } else if (type === 'mixer' && gameState.elements.Water >= 10 && gameState.elements.Lava >= 5) {
+                gameState.elements.Water -= 10;
+                gameState.elements.Lava -= 5;
+                nodeData.name = '調合陣 Mk-1';
+                nodeData.manaCost = 4;
+                costCheck = true;
+            } else if (type === 'relay' && gameState.elements.Earth >= 3 && gameState.elements.Water >= 3) {
+                gameState.elements.Earth -= 3;
+                gameState.elements.Water -= 3;
+                nodeData.name = '中継陣';
+                nodeData.manaCost = 1;
+                costCheck = true;
+            }
+
+            if (costCheck) {
+                nodeData.id = Date.now();
+                gameState.nodes.push(nodeData);
+            } else {
+                alert('クラフト素材（エレメント）が不足しています。');
+            }
+        }
+
+        // --- ループ & 描画処理 ---
+        function updateGame() {
+            handlePlayerMovement();
+
+            // 自動汲み出し
+            gameState.nodes.forEach(n => {
+                if (n.type === 'collector' && n.harvestType) {
+                    gameState.elements[n.harvestType] = (gameState.elements[n.harvestType] || 0) + (0.1 / 60);
                 }
             });
 
-            // パーティクルの導管移動
-            for (let i = particles.length - 1; i >= 0; i--) {
-                const p = particles[i];
-                p.progress += p.speed * delta;
-                if (p.progress >= 1.0) {
-                    const target = p.line.to;
-                    if (target.type === 'mixer') {
-                        target.inputs[p.elementId] = (target.inputs[p.elementId] || 0) + 1;
-                        checkMixerRecipes(target);
-                    } else if (target.type === 'relay') {
-                        target.elementId = p.elementId;
-                        // 次の導管へリレー
-                        lines.filter(l => l.from === target).forEach(line => {
-                            particles.push({ line: line, progress: 0, speed: 0.015, elementId: p.elementId });
-                        });
-                    }
-                    particles.splice(i, 1);
-                }
-            }
-        }
-
-        function checkMixerRecipes(mixerNode) {
-            for (let recipe of RECIPES) {
-                const canCraft = recipe.in.every(req => (mixerNode.inputs[req] || 0) > 0);
-                if (canCraft) {
-                    recipe.in.forEach(req => mixerNode.inputs[req]--);
-                    mixerNode.elementId = recipe.out;
-
-                    if (recipe.out === 31 && !gameCleared) {
-                        gameCleared = true;
-                        document.getElementById('victory-modal').style.display = 'block';
-                        document.getElementById('task-4').classList.add('done');
-                        document.getElementById('task-4').innerHTML = '<span>・賢者の石を錬成する</span><span>達成！</span>';
-                    }
-                    break;
-                }
-            }
-        }
-
-        // --- 描画処理 ---
-        function renderScene() {
-            // 1. 古代羊皮紙風 錬金術幾何学背景
-            bgAlchemyGraphics.clear();
-            bgAlchemyGraphics.lineStyle(1.5, 0x5a4325, 0.25);
-            bgAlchemyGraphics.drawCircle(0, 0, 150);
-            bgAlchemyGraphics.drawCircle(0, 0, 300);
-            bgAlchemyGraphics.drawCircle(0, 0, 600);
+            // マナ消費・更新
+            let totalManaCost = gameState.nodes.reduce((sum, n) => sum + (n.manaCost || 0), 0);
+            totalManaCost += gameState.lines.length * 0.1;
             
-            // 放射状直線
-            for (let a = 0; a < Math.PI * 2; a += Math.PI / 6) {
-                bgAlchemyGraphics.moveTo(0, 0);
-                bgAlchemyGraphics.lineTo(Math.cos(a) * 700, Math.sin(a) * 700);
-            }
+            gameState.manaRate = 5 - totalManaCost;
+            gameState.mana = Math.min(gameState.maxMana, Math.max(0, gameState.mana + gameState.manaRate / 60));
 
-            // 2. 自然地形の描画
-            terrainGraphics.clear();
-            terrainZones.forEach(zone => {
-                terrainGraphics.beginFill(zone.type.color, 0.35);
-                terrainGraphics.lineStyle(2, zone.type.color, 0.8);
-                terrainGraphics.drawCircle(zone.x, zone.y, zone.radius);
-                terrainGraphics.endFill();
-            });
+            // UI更新
+            document.getElementById('mana-display').innerText = `${Math.floor(gameState.mana)} / ${gameState.maxMana} (${gameState.manaRate >= 0 ? '+' : ''}${gameState.manaRate.toFixed(1)}/s)`;
+            
+            document.getElementById('element-display').innerHTML = `
+                🜄 水: ${Math.floor(gameState.elements.Water)}<br>
+                🜂 火: ${Math.floor(gameState.elements.Fire)}<br>
+                🜃 土: ${Math.floor(gameState.elements.Earth)}<br>
+                🜁 風: ${Math.floor(gameState.elements.Wind)}<br>
+                🌋 溶岩: ${Math.floor(gameState.elements.Lava)}
+            `;
 
-            // 3. 導管（ライン）
-            lineGraphics.clear();
-            lines.forEach(line => {
-                lineGraphics.lineStyle(gameCleared ? 4 : 2, gameCleared ? 0xf1c40f : 0x8c6a43, 0.8);
-                lineGraphics.moveTo(line.from.x, line.from.y);
-                lineGraphics.lineTo(line.to.x, line.to.y);
-            });
-
-            // 4. エレメント粒子
-            particleGraphics.clear();
-            particles.forEach(p => {
-                const elem = ELEMENTS[p.elementId];
-                const color = elem ? elem.color : 0xffffff;
-                const x = p.line.from.x + (p.line.to.x - p.line.from.x) * p.progress;
-                const y = p.line.from.y + (p.line.to.y - p.line.from.y) * p.progress;
-                
-                particleGraphics.beginFill(color, 0.9);
-                particleGraphics.drawCircle(x, y, 5);
-                particleGraphics.endFill();
-            });
-
-            // 5. ノード描画 & アイコン表示
-            nodes.forEach(node => {
-                const g = node.gfx;
-                g.clear();
-
-                const elem = ELEMENTS[node.elementId];
-                const color = elem ? elem.color : 0x4a3525;
-
-                if (node.type === 'extractor') {
-                    g.beginFill(color, 0.9);
-                    g.lineStyle(2, 0xffffff, 0.8);
-                    g.drawRect(node.x - 14, node.y - 14, 28, 28);
-                    g.endFill();
-
-                    if (elem) {
-                        node.textGfx.text = elem.symbol;
-                        node.textGfx.x = node.x - 7;
-                        node.textGfx.y = node.y - 32;
-                    }
-                } else if (node.type === 'mixer') {
-                    g.beginFill(color, 0.9);
-                    g.lineStyle(3, 0xf1c40f, 1.0);
-                    g.drawPolygon([
-                        node.x, node.y - 22,
-                        node.x + 20, node.y + 14,
-                        node.x - 20, node.y + 14
-                    ]);
-                    g.endFill();
-                } else { // relay
-                    g.beginFill(0x2c1d11, 0.9);
-                    g.lineStyle(2, 0x8c6a43, 0.8);
-                    g.drawCircle(node.x, node.y, 10);
-                    g.endFill();
-                }
-            });
-
-            // 6. プレイヤー & リーチエリア
-            playerGraphics.clear();
-            // リーチ範囲 (点線円枠)
-            playerGraphics.lineStyle(1, 0xf1c40f, 0.3);
-            playerGraphics.drawCircle(player.x, player.y, player.reachRadius);
-
-            // プレイヤー本体 (錬金術師)
-            playerGraphics.beginFill(0xd35400, 0.9);
-            playerGraphics.lineStyle(2, 0xffffff, 1.0);
-            playerGraphics.drawCircle(player.x, player.y, player.radius);
-            playerGraphics.endFill();
+            const simScore = Math.min(10000, gameState.nodes.length * 250 * gameState.symmetryAxes);
+            document.getElementById('score-display').innerText = `${simScore} pt (Rank ${simScore > 8000 ? 'S' : simScore > 5000 ? 'A' : 'B'})`;
         }
 
-        // --- インタラクション & 構築 ---
-        function setupEvents() {
-            window.addEventListener('keydown', (e) => {
-                if (e.key === 'w' || e.key === 'W') keys.w = true;
-                if (e.key === 's' || e.key === 'S') keys.s = true;
-                if (e.key === 'a' || e.key === 'A') keys.a = true;
-                if (e.key === 'd' || e.key === 'D') keys.d = true;
+        function renderMainCanvas() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-                if (e.key === 'c' || e.key === 'C') setMode('connect');
-                if (e.key === 'r' || e.key === 'R') setMode('delete');
-            });
+            ctx.save();
+            ctx.translate(canvas.width / 2, canvas.height / 2);
+            ctx.scale(gameState.camera.zoom, gameState.camera.zoom);
+            ctx.translate(gameState.camera.x, gameState.camera.y);
 
-            window.addEventListener('keyup', (e) => {
-                if (e.key === 'w' || e.key === 'W') keys.w = false;
-                if (e.key === 's' || e.key === 'S') keys.s = false;
-                if (e.key === 'a' || e.key === 'A') keys.a = false;
-                if (e.key === 'd' || e.key === 'D') keys.d = false;
-            });
-
-            // マウスクリックでの設置
-            app.view.addEventListener('click', (e) => {
-                if (currentMode === 'move') return;
-
-                const worldPos = {
-                    x: e.clientX - app.screen.width / 2 + player.x,
-                    y: e.clientY - app.screen.height / 2 + player.y
-                };
-
-                // リーチ範囲内か確認
-                const distToPlayer = Math.hypot(worldPos.x - player.x, worldPos.y - player.y);
-                if (distToPlayer > player.reachRadius) return;
-
-                if (currentMode === 'extractor') {
-                    // 自然地形の上かチェック
-                    const zone = terrainZones.find(z => Math.hypot(z.x - worldPos.x, z.y - worldPos.y) < z.radius);
-                    if (zone) {
-                        createNode(worldPos.x, worldPos.y, 'extractor', zone.type.elementId);
-                        document.getElementById('task-1').classList.add('done');
-                        document.getElementById('task-1').innerHTML = '<span>・川/火山に採取陣を配置</span><span>達成！</span>';
-                    }
-                } else if (currentMode === 'relay') {
-                    createNode(worldPos.x, worldPos.y, 'relay', null);
-                } else if (currentMode === 'mixer') {
-                    createNode(worldPos.x, worldPos.y, 'mixer', null);
+            // 1. グリッド
+            ctx.strokeStyle = '#222230';
+            ctx.lineWidth = 1 / gameState.camera.zoom;
+            if (gameState.gridType === 'Cartesian') {
+                for (let x = -2000; x <= 2000; x += 50) {
+                    ctx.beginPath(); ctx.moveTo(x, -2000); ctx.lineTo(x, 2000); ctx.stroke();
                 }
-            });
-        }
-
-        function onNodeClick(e, node) {
-            e.stopPropagation();
-            const dist = Math.hypot(node.x - player.x, node.y - player.y);
-            if (dist > player.reachRadius) return;
-
-            if (currentMode === 'delete') {
-                nodes = nodes.filter(n => n !== node);
-                lines = lines.filter(l => l.from !== node && l.to !== node);
-                nodeContainer.removeChild(node.gfx);
-                nodeContainer.removeChild(node.textGfx);
-            } else if (currentMode === 'connect') {
-                if (!connectingStartNode) {
-                    connectingStartNode = node;
-                } else {
-                    if (connectingStartNode !== node) {
-                        lines.push({ from: connectingStartNode, to: node });
-                        document.getElementById('task-2').classList.add('done');
-                        document.getElementById('task-2').innerHTML = '<span>・導管で中央へエレメント運搬</span><span>達成！</span>';
-                    }
-                    connectingStartNode = null;
+                for (let y = -2000; y <= 2000; y += 50) {
+                    ctx.beginPath(); ctx.moveTo(-2000, y); ctx.lineTo(2000, y); ctx.stroke();
+                }
+            } else {
+                for (let r = 50; r <= 2000; r += 80) {
+                    ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.stroke();
                 }
             }
+
+            // 2. 自然地形
+            gameState.resourceNodes.forEach(r => {
+                const conf = RESOURCE_TYPES[r.type];
+                ctx.beginPath();
+                ctx.arc(r.x, r.y, r.radius, 0, Math.PI * 2);
+                ctx.fillStyle = conf.color;
+                ctx.fill();
+                ctx.strokeStyle = conf.borderColor;
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                ctx.fillStyle = '#fff';
+                ctx.font = '16px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(conf.symbol, r.x, r.y);
+            });
+
+            // 3. マナライン
+            ctx.strokeStyle = '#00d2ff';
+            ctx.lineWidth = 2 / gameState.camera.zoom;
+            gameState.lines.forEach(l => {
+                ctx.beginPath();
+                ctx.moveTo(l.from.x, l.from.y);
+                ctx.lineTo(l.to.x, l.to.y);
+                ctx.stroke();
+            });
+
+            // 4. 施設ノード
+            const time = Date.now() * 0.003;
+            gameState.nodes.forEach(n => {
+                ctx.beginPath();
+                ctx.arc(n.x, n.y, n.type === 'core' ? 20 : 14, 0, Math.PI * 2);
+                ctx.fillStyle = n.type === 'core' ? '#ffaa00' : n.type === 'collector' ? '#4caf50' : n.type === 'mixer' ? '#e91e63' : '#9c27b0';
+                ctx.fill();
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 1.5 / gameState.camera.zoom;
+                ctx.stroke();
+
+                if (n.type === 'collector' && n.harvestType) {
+                    const offsetY = Math.sin(time) * 5 - 22;
+                    ctx.fillStyle = '#fff';
+                    ctx.font = '14px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(RESOURCE_TYPES[n.harvestType].symbol, n.x, n.y + offsetY);
+                }
+            });
+
+            // 5. プレイヤー & リーチ範囲
+            const px = gameState.player.x;
+            const py = gameState.player.y;
+
+            ctx.beginPath();
+            ctx.arc(px, py, gameState.player.reachRadius, 0, Math.PI * 2);
+            ctx.strokeStyle = 'rgba(0, 210, 255, 0.4)';
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([6, 6]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            ctx.beginPath();
+            ctx.arc(px, py, 10, 0, Math.PI * 2);
+            ctx.fillStyle = '#00d2ff';
+            ctx.fill();
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            ctx.restore();
         }
 
-        function setMode(mode) {
-            currentMode = mode;
-            document.querySelectorAll('.hotbar-btn').forEach(btn => btn.classList.remove('active'));
-            const activeBtn = document.getElementById(`btn-${mode}`);
-            if (activeBtn) activeBtn.classList.add('active');
-            connectingStartNode = null;
+        // --- ミニマップ描画処理 ---
+        function renderMinimap() {
+            const mw = minimapCanvas.width;
+            const mh = minimapCanvas.height;
+            const scale = mw / gameState.worldSize; // ワールド座標 -> ミニマップ座標の縮尺
+
+            minimapCtx.clearRect(0, 0, mw, mh);
+
+            // ワールド中心 (0,0) を ミニマップの中心 (mw/2, mh/2) にマッピング
+            function toMiniX(wx) { return wx * scale + mw / 2; }
+            function toMiniY(wy) { return wy * scale + mh / 2; }
+
+            // 1. 自然地形を描画
+            gameState.resourceNodes.forEach(r => {
+                const mx = toMiniX(r.x);
+                const my = toMiniY(r.y);
+                const mr = Math.max(2, r.radius * scale);
+                minimapCtx.beginPath();
+                minimapCtx.arc(mx, my, mr, 0, Math.PI * 2);
+                minimapCtx.fillStyle = RESOURCE_TYPES[r.type].miniColor;
+                minimapCtx.globalAlpha = 0.6;
+                minimapCtx.fill();
+                minimapCtx.globalAlpha = 1.0;
+            });
+
+            // 2. マナラインを描画
+            minimapCtx.strokeStyle = '#00d2ff';
+            minimapCtx.lineWidth = 1;
+            gameState.lines.forEach(l => {
+                minimapCtx.beginPath();
+                minimapCtx.moveTo(toMiniX(l.from.x), toMiniY(l.from.y));
+                minimapCtx.lineTo(toMiniX(l.to.x), toMiniY(l.to.y));
+                minimapCtx.stroke();
+            });
+
+            // 3. 施設ノードを描画
+            gameState.nodes.forEach(n => {
+                const mx = toMiniX(n.x);
+                const my = toMiniY(n.y);
+                minimapCtx.beginPath();
+                minimapCtx.arc(mx, my, n.type === 'core' ? 4 : 2.5, 0, Math.PI * 2);
+                minimapCtx.fillStyle = n.type === 'core' ? '#ffaa00' : n.type === 'collector' ? '#4caf50' : n.type === 'mixer' ? '#e91e63' : '#9c27b0';
+                minimapCtx.fill();
+            });
+
+            // 4. 現在のカメラ視野領域（画角）を表示
+            const viewWidth = canvas.width / gameState.camera.zoom;
+            const viewHeight = canvas.height / gameState.camera.zoom;
+            const viewMinX = toMiniX(gameState.player.x - viewWidth / 2);
+            const viewMinY = toMiniY(gameState.player.y - viewHeight / 2);
+            const viewMiniW = viewWidth * scale;
+            const viewMiniH = viewHeight * scale;
+
+            minimapCtx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+            minimapCtx.lineWidth = 1;
+            minimapCtx.strokeRect(viewMinX, viewMinY, viewMiniW, viewMiniH);
+
+            // 5. プレイヤー位置（点）を描画
+            const pmx = toMiniX(gameState.player.x);
+            const pmy = toMiniY(gameState.player.y);
+            minimapCtx.beginPath();
+            minimapCtx.arc(pmx, pmy, 3.5, 0, Math.PI * 2);
+            minimapCtx.fillStyle = '#00d2ff';
+            minimapCtx.fill();
+            minimapCtx.strokeStyle = '#ffffff';
+            minimapCtx.lineWidth = 1;
+            minimapCtx.stroke();
         }
 
-        function updateUI() {
-            document.getElementById('res-fire').innerText = inventory[1] || 0;
-            document.getElementById('res-water').innerText = inventory[2] || 0;
-            document.getElementById('res-earth').innerText = inventory[3] || 0;
-            document.getElementById('res-wind').innerText = inventory[4] || 0;
+        function render() {
+            renderMainCanvas();
+            renderMinimap();
+            requestAnimationFrame(render);
         }
+
+        setInterval(updateGame, 1000 / 60);
+        render();
     </script>
 </body>
 </html>
