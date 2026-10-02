@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>エレメントアルケミスト（仮）</title>
+    <title>エレメントアルケミスト（仮）- フォグ・オブ・ウォー実装版</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #1a1a1a; color: #eee; overflow: hidden; }
@@ -17,12 +17,12 @@
         .score-val { color: #ff007f; }
 
         /* Main Container */
-        #main-container { display: flex; height: calc(100vh - 80px); }
+        #main-container { display: flex; height: calc(100vh - 80px); position: relative; }
 
-        /* Left Palette / Sidebar */
+        /* Left Sidebar */
         #left-sidebar {
             width: 260px; background: #22222c; border-right: 2px solid #444;
-            display: flex; flex-direction: column; gap: 10px; padding: 12px; overflow-y: auto;
+            display: flex; flex-direction: column; gap: 10px; padding: 12px; overflow-y: auto; z-index: 10;
         }
         .section-title { font-size: 14px; color: #aaa; border-bottom: 1px solid #444; padding-bottom: 4px; margin-top: 8px; }
         .btn {
@@ -33,36 +33,59 @@
         .btn.active { border-color: #00d2ff; background: #2a4a6a; }
 
         /* Canvas View */
-        #canvas-container { flex: 1; position: relative; background: #121216; overflow: hidden; }
+        #canvas-container { flex: 1; position: relative; background: #000000; overflow: hidden; }
         canvas#gameCanvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
 
         /* MiniMap Overlay */
         #minimap-container {
             position: absolute; top: 12px; right: 12px;
             width: 180px; height: 180px;
-            background: rgba(20, 20, 28, 0.85);
+            background: #050508;
             border: 2px solid #555; border-radius: 8px;
-            overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.5);
-            pointer-events: none;
+            overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.8);
+            pointer-events: none; z-index: 5;
         }
         #minimapCanvas { width: 100%; height: 100%; }
 
         /* Right Panel */
         #right-sidebar {
-            width: 240px; background: #22222c; border-left: 2px solid #444; padding: 12px; font-size: 13px;
+            width: 240px; background: #22222c; border-left: 2px solid #444; padding: 12px; font-size: 13px; z-index: 10;
         }
 
         /* Bottom Hotbar */
         #bottom-bar {
             height: 40px; background: #2a2a35; border-top: 2px solid #444;
-            display: flex; align-items: center; justify-content: center; gap: 12px;
+            display: flex; align-items: center; justify-content: center; gap: 12px; z-index: 10;
         }
         .hotbar-slot {
             padding: 4px 12px; background: #333; border: 1px solid #555; border-radius: 4px; font-size: 12px;
         }
-        .resource-list {
-            margin-top: 8px; line-height: 1.6;
+        .resource-list { margin-top: 8px; line-height: 1.6; }
+
+        /* Inventory & Crafting Modal Overlay */
+        #inventory-modal {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 600px; height: 420px; background: rgba(25, 25, 35, 0.95);
+            border: 2px solid #00d2ff; border-radius: 8px; box-shadow: 0 8px 32px rgba(0,0,0,0.8);
+            display: none; flex-direction: column; padding: 16px; z-index: 100; backdrop-filter: blur(4px);
         }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #444; padding-bottom: 8px; }
+        .modal-body { display: flex; flex: 1; gap: 16px; margin-top: 12px; overflow: hidden; }
+        .inv-column { flex: 1; background: #1a1a22; border: 1px solid #333; border-radius: 4px; padding: 10px; overflow-y: auto; }
+        .inv-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 8px; }
+        .inv-slot {
+            width: 50px; height: 50px; background: #2a2a38; border: 1px solid #444;
+            border-radius: 4px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+            font-size: 11px; cursor: pointer; position: relative;
+        }
+        .inv-slot:hover { border-color: #00d2ff; background: #3a3a4a; }
+        .inv-slot .count { position: absolute; bottom: 2px; right: 4px; font-size: 10px; color: #00d2ff; font-weight: bold; }
+        .craft-item {
+            display: flex; justify-content: space-between; align-items: center;
+            background: #282836; padding: 8px; margin-bottom: 6px; border-radius: 4px; border: 1px solid #444;
+        }
+        .craft-btn { background: #0096ff; color: #fff; border: none; padding: 4px 8px; border-radius: 3px; cursor: pointer; font-size: 11px; }
+        .craft-btn:hover { background: #00b4ff; }
     </style>
 </head>
 <body>
@@ -85,15 +108,12 @@
         <div id="left-sidebar">
             <div class="section-title">操作モード</div>
             <button class="btn" id="btn-select" onclick="selectTool('select')">選択 / アクション</button>
-            <button class="btn" id="btn-collector" onclick="selectTool('collector')">採取陣 [2] (Req: 地×5, 火×2)</button>
-            <button class="btn" id="btn-line" onclick="selectTool('line')">転送マナライン [1 / C] (Req: 風×2)</button>
-            <button class="btn" id="btn-mixer" onclick="selectTool('mixer')">調合陣 [3] (Req: 水×10, 溶岩×5)</button>
-            <button class="btn" id="btn-relay" onclick="selectTool('relay')">中継陣 [4] (Req: 地×3, 水×3)</button>
+            <button class="btn" id="btn-collector" onclick="selectTool('collector')">採取陣 [2]</button>
+            <button class="btn" id="btn-line" onclick="selectTool('line')">転送マナライン [1 / C]</button>
+            <button class="btn" id="btn-mixer" onclick="selectTool('mixer')">調合陣 [3]</button>
+            <button class="btn" id="btn-relay" onclick="selectTool('relay')">中継陣 [4]</button>
             <button class="btn" id="btn-delete" onclick="selectTool('delete')">削除モード [R]</button>
-
-            <div class="section-title">研究 (Research) [T]</div>
-            <button class="btn" onclick="research('tech1')">基礎採取効率化 (Cost: 50 Mana)</button>
-            <button class="btn" onclick="research('tech2')">マナ伝導最適化 (Cost: 100 Mana)</button>
+            <button class="btn" style="margin-top: 10px; background: #2a5a3a;" onclick="toggleInventory()">インベントリ / クラフト [E]</button>
 
             <div class="section-title">表示・対称モード [M / G]</div>
             <button class="btn" onclick="toggleSymmetry()">対称モード [M]: <span id="sym-mode">Off</span></button>
@@ -103,8 +123,6 @@
         <!-- Main Canvas View -->
         <div id="canvas-container">
             <canvas id="gameCanvas"></canvas>
-            
-            <!-- ミニマップオーバーレイ -->
             <div id="minimap-container">
                 <canvas id="minimapCanvas" width="180" height="180"></canvas>
             </div>
@@ -113,54 +131,106 @@
         <!-- Right Detail Panel -->
         <div id="right-sidebar">
             <div class="section-title">所持エレメント</div>
-            <div class="resource-list" id="element-display">
-                🜄 水: 10<br>
-                🜂 火: 10<br>
-                🜃 土: 20<br>
-                🜁 風: 10<br>
-                🌋 溶岩: 5
-            </div>
-
+            <div class="resource-list" id="element-display"></div>
             <div class="section-title" style="margin-top: 16px;">ノード詳細情報</div>
             <div id="node-info">ノードを選択してください</div>
+        </div>
+
+        <!-- Inventory & Crafting Modal -->
+        <div id="inventory-modal">
+            <div class="modal-header">
+                <h3>インベントリ & クラフト [E]</h3>
+                <button class="btn" style="padding: 2px 8px;" onclick="toggleInventory()">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="inv-column">
+                    <div style="font-weight: bold; margin-bottom: 8px;">クラフト可能なレシピ</div>
+                    <div id="crafting-list"></div>
+                </div>
+                <div class="inv-column">
+                    <div style="font-weight: bold; margin-bottom: 8px;">所持アイテム（設置可能）</div>
+                    <div class="inv-grid" id="inventory-grid"></div>
+                </div>
+            </div>
         </div>
     </div>
 
     <!-- Bottom Hotbar -->
     <div id="bottom-bar">
-        <div class="hotbar-slot">WASD: プレイヤー移動</div>
+        <div class="hotbar-slot">WASD: 移動</div>
+        <div class="hotbar-slot">[E]: クラフト / 所持品</div>
         <div class="hotbar-slot">1: マナライン</div>
         <div class="hotbar-slot">2: 採取陣</div>
         <div class="hotbar-slot">3: 調合陣</div>
         <div class="hotbar-slot">4: 中継陣</div>
         <div class="hotbar-slot">[R]: 削除</div>
-        <div class="hotbar-slot">点線内のみ設置可能</div>
     </div>
 
     <script>
-        // --- 状態管理 (State Management) ---
+        // --- 設定・定数定義 ---
+        const TILE_SIZE = 32;
+        const CHUNK_SIZE = 16;
+        const CHUNK_PX = TILE_SIZE * CHUNK_SIZE;
+        const WORLD_VIEW_SIZE = 3200; // ミニマップ表示用ワールド仮想サイズ
+
+        // --- ゲーム状態管理 ---
         const gameState = {
             mana: 100,
             maxMana: 500,
-            manaRate: 0,
-            elements: { Water: 10, Fire: 10, Earth: 20, Wind: 10, Lava: 5 },
+            manaRate: 1.0,
+            elements: { Water: 20, Fire: 10, Earth: 20, Wind: 10, Lava: 5 },
+            inventory: { line: 10, collector: 2, mixer: 1, relay: 5 },
             nodes: [],
             lines: [],
-            resourceNodes: [],
+            chunks: {},
+            exploredTiles: new Set(), // 探索済みタイルの座標を記憶 (Format: "tx_ty")
             selectedTool: 'select',
             symmetryAxes: 1,
             gridType: 'Cartesian',
             connectingNode: null,
-            worldSize: 3000, // ワールド全体の幅・高さ (-1500 ~ +1500)
+            isInventoryOpen: false,
+            
+            // プレイヤー情報
             player: {
                 x: 0,
                 y: 0,
-                speed: 3.5,
-                reachRadius: 180
+                speed: 4,
+                reachRadius: 180,
+                sightRadius: 350, // 視界・探索半径（ピクセル）
+                facing: 0,
+                animFrame: 0,
+                isMoving: false
             },
             camera: { x: 0, y: 0, zoom: 1 },
             keysPressed: {}
         };
+
+        const CRAFT_RECIPES = {
+            line: { name: 'マナライン', req: { Wind: 2 }, yield: 2 },
+            collector: { name: '採取陣', req: { Earth: 5, Fire: 2 }, yield: 1 },
+            relay: { name: '中継陣', req: { Earth: 3, Water: 3 }, yield: 1 },
+            mixer: { name: '調合陣', req: { Water: 10, Lava: 5 }, yield: 1 }
+        };
+
+        // フォールバックスプライト生成
+        const playerSprite = new Image();
+        function generateFallbackSprite() {
+            const c = document.createElement('canvas');
+            c.width = 128; c.height = 128;
+            const cx = c.getContext('2d');
+            const dirs = ['#00d2ff', '#ff007f', '#00ffaa', '#ffaa00'];
+            for(let d = 0; d < 4; d++) {
+                for(let f = 0; f < 4; f++) {
+                    const x = f * 32; const y = d * 32;
+                    cx.fillStyle = dirs[d];
+                    cx.fillRect(x + 8, y + 8, 16, 16);
+                    cx.fillStyle = '#ffffff';
+                    cx.fillRect(x + 12 + (f % 2 * 2), y + 12, 4, 4);
+                }
+            }
+            playerSprite.src = c.toDataURL();
+        }
+        generateFallbackSprite();
 
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
@@ -174,34 +244,47 @@
         window.addEventListener('resize', resizeCanvas);
         resizeCanvas();
 
-        // --- マップ自然地形（エレメント資源）のランダム生成 ---
-        const RESOURCE_TYPES = {
-            Water: { name: '水脈・川', symbol: '🜄', color: 'rgba(0, 150, 255, 0.4)', borderColor: '#0096ff', miniColor: '#0096ff' },
-            Fire:  { name: '火山・溶岩地帯', symbol: '🜂', color: 'rgba(255, 60, 0, 0.4)', borderColor: '#ff3c00', miniColor: '#ff3c00' },
-            Earth: { name: '山脈・岩盤', symbol: '🜃', color: 'rgba(139, 69, 19, 0.4)', borderColor: '#8b4513', miniColor: '#8b4513' },
-            Wind:  { name: '風の谷・湧昇気流', symbol: '🜁', color: 'rgba(230, 230, 50, 0.4)', borderColor: '#e6e632', miniColor: '#e6e632' }
+        // タイル定義（5: 霊脈）
+        const TILE_TYPES = {
+            0: { color: '#181820', miniColor: '#1a1a24' },
+            1: { color: '#003366', symbol: '🜄', miniColor: '#004488' },
+            2: { color: '#661100', symbol: '🜂', miniColor: '#882200' },
+            3: { color: '#332211', symbol: '🜃', miniColor: '#553311' },
+            4: { color: '#444411', symbol: '🜁', miniColor: '#666611' },
+            5: { color: '#004455', symbol: '✨', miniColor: '#00ffff' }
         };
 
-        function generateNaturalTerrain() {
-            const types = ['Water', 'Fire', 'Earth', 'Wind'];
-            const halfSize = gameState.worldSize / 2 - 100;
-            for (let i = 0; i < 35; i++) {
-                const type = types[Math.floor(Math.random() * types.length)];
-                gameState.resourceNodes.push({
-                    id: 'res_' + i,
-                    type: type,
-                    x: (Math.random() - 0.5) * halfSize * 2,
-                    y: (Math.random() - 0.5) * halfSize * 2,
-                    radius: 35 + Math.random() * 25
-                });
-            }
-        }
-        generateNaturalTerrain();
+        function getOrCreateChunk(cx, cy) {
+            const key = `${cx}_${cy}`;
+            if (gameState.chunks[key]) return gameState.chunks[key];
 
-        // 初期コアプラント設置
+            const tiles = [];
+            for (let ty = 0; ty < CHUNK_SIZE; ty++) {
+                const row = [];
+                for (let tx = 0; tx < CHUNK_SIZE; tx++) {
+                    const wx = (cx * CHUNK_SIZE + tx) * TILE_SIZE;
+                    const wy = (cy * CHUNK_SIZE + ty) * TILE_SIZE;
+                    let tileType = 0;
+                    const rand = Math.sin(wx * 0.01) + Math.cos(wy * 0.01);
+                    const rand2 = Math.cos(wx * 0.03) * Math.sin(wy * 0.03);
+
+                    if (rand2 > 0.65) tileType = 5;
+                    else if (rand > 1.4) tileType = 1;
+                    else if (rand < -1.5) tileType = 2;
+                    else if (rand > 1.2 && rand <= 1.4) tileType = 3;
+                    else if (rand < -1.3 && rand >= -1.5) tileType = 4;
+                    
+                    row.push(tileType);
+                }
+                tiles.push(row);
+            }
+            gameState.chunks[key] = tiles;
+            return tiles;
+        }
+
+        // 初期コアプラント
         gameState.nodes.push({ id: 0, type: 'core', x: 0, y: 0, manaCost: 0, name: '錬金炉（コアプラント）' });
 
-        // --- 座標変換 ---
         function screenToWorld(sx, sy) {
             const cx = canvas.width / 2;
             const cy = canvas.height / 2;
@@ -211,7 +294,73 @@
             };
         }
 
-        // --- UI & ツール操作 ---
+        // 探索領域の更新（プレイヤー周辺を「探索済み」にする）
+        function updateExploration() {
+            const pTileX = Math.floor(gameState.player.x / TILE_SIZE);
+            const pTileY = Math.floor(gameState.player.y / TILE_SIZE);
+            const radiusInTiles = Math.ceil(gameState.player.sightRadius / TILE_SIZE);
+
+            for (let ty = -radiusInTiles; ty <= radiusInTiles; ty++) {
+                for (let tx = -radiusInTiles; tx <= radiusInTiles; tx++) {
+                    if (tx * tx + ty * ty <= radiusInTiles * radiusInTiles) {
+                        gameState.exploredTiles.add(`${pTileX + tx}_${pTileY + ty}`);
+                    }
+                }
+            }
+        }
+
+        // --- インベントリ・クラフト UI 制御 ---
+        function toggleInventory() {
+            gameState.isInventoryOpen = !gameState.isInventoryOpen;
+            document.getElementById('inventory-modal').style.display = gameState.isInventoryOpen ? 'flex' : 'none';
+            if (gameState.isInventoryOpen) updateInventoryUI();
+        }
+
+        function craftItem(recipeKey) {
+            const recipe = CRAFT_RECIPES[recipeKey];
+            for (const [elem, count] of Object.entries(recipe.req)) {
+                if ((gameState.elements[elem] || 0) < count) {
+                    alert(`素材不足: ${elem} が ${count} 個必要です`);
+                    return;
+                }
+            }
+            for (const [elem, count] of Object.entries(recipe.req)) {
+                gameState.elements[elem] -= count;
+            }
+            gameState.inventory[recipeKey] = (gameState.inventory[recipeKey] || 0) + recipe.yield;
+            updateInventoryUI();
+        }
+
+        function updateInventoryUI() {
+            const craftList = document.getElementById('crafting-list');
+            craftList.innerHTML = '';
+            for (const [key, recipe] of Object.entries(CRAFT_RECIPES)) {
+                const reqStr = Object.entries(recipe.req).map(([k, v]) => `${k}:${v}`).join(', ');
+                craftList.innerHTML += `
+                    <div class="craft-item">
+                        <div>
+                            <b>${recipe.name}</b> (+${recipe.yield})<br>
+                            <span style="font-size:10px; color:#aaa;">必要: ${reqStr}</span>
+                        </div>
+                        <button class="craft-btn" onclick="craftItem('${key}')">作成</button>
+                    </div>
+                `;
+            }
+
+            const invGrid = document.getElementById('inventory-grid');
+            invGrid.innerHTML = '';
+            for (const [key, count] of Object.entries(gameState.inventory)) {
+                if (count <= 0) continue;
+                const name = CRAFT_RECIPES[key] ? CRAFT_RECIPES[key].name : key;
+                invGrid.innerHTML += `
+                    <div class="inv-slot" onclick="selectTool('${key}'); toggleInventory();">
+                        <div>${name}</div>
+                        <div class="count">x${count}</div>
+                    </div>
+                `;
+            }
+        }
+
         function selectTool(tool) {
             gameState.selectedTool = tool;
             gameState.connectingNode = null;
@@ -232,31 +381,40 @@
             document.getElementById('grid-mode').innerText = gameState.gridType;
         }
 
-        function research(techId) {
-            if (techId === 'tech1' && gameState.mana >= 50) {
-                gameState.mana -= 50;
-                alert('研究完了: 基礎採取効率化 (+50% 効率)');
-            } else if (techId === 'tech2' && gameState.mana >= 100) {
-                gameState.mana -= 100;
-                alert('研究完了: マナ伝導最適化');
+        // プレイヤー移動処理
+        function handlePlayerMovement() {
+            let dx = 0, dy = 0;
+            if (gameState.keysPressed['w']) { dy -= 1; gameState.player.facing = 3; }
+            if (gameState.keysPressed['s']) { dy += 1; gameState.player.facing = 0; }
+            if (gameState.keysPressed['a']) { dx -= 1; gameState.player.facing = 1; }
+            if (gameState.keysPressed['d']) { dx += 1; gameState.player.facing = 2; }
+
+            if (dx !== 0 && dy !== 0) { dx *= 0.7071; dy *= 0.7071; }
+
+            gameState.player.isMoving = (dx !== 0 || dy !== 0);
+
+            if (gameState.player.isMoving) {
+                gameState.player.x += dx * gameState.player.speed;
+                gameState.player.y += dy * gameState.player.speed;
+                gameState.player.animFrame = (gameState.player.animFrame + 0.15) % 4;
             } else {
-                alert('マナが足りません！');
+                gameState.player.animFrame = 0;
             }
+
+            gameState.camera.x = -gameState.player.x;
+            gameState.camera.y = -gameState.player.y;
+
+            updateExploration(); // 移動時にフォグ開放を更新
         }
 
-        // --- 入力イベント ---
+        // ノード設置・アクション
         canvas.addEventListener('mousedown', (e) => {
-            if (e.button !== 0) return;
+            if (e.button !== 0 || gameState.isInventoryOpen) return;
 
             const rect = canvas.getBoundingClientRect();
-            const sx = e.clientX - rect.left;
-            const sy = e.clientY - rect.top;
-            const worldPos = screenToWorld(sx, sy);
+            const worldPos = screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
 
-            const distToPlayer = Math.hypot(worldPos.x - gameState.player.x, worldPos.y - gameState.player.y);
-            if (distToPlayer > gameState.player.reachRadius) {
-                return;
-            }
+            if (Math.hypot(worldPos.x - gameState.player.x, worldPos.y - gameState.player.y) > gameState.player.reachRadius) return;
 
             const clickedNode = gameState.nodes.find(n => Math.hypot(n.x - worldPos.x, n.y - worldPos.y) < 20);
 
@@ -265,158 +423,94 @@
                     if (!gameState.connectingNode) {
                         gameState.connectingNode = clickedNode;
                     } else if (gameState.connectingNode !== clickedNode) {
-                        if (gameState.elements.Wind >= 2) {
-                            gameState.elements.Wind -= 2;
-                            gameState.lines.push({ from: gameState.connectingNode, to: clickedNode, manaCost: 0.1 });
+                        if ((gameState.inventory.line || 0) > 0) {
+                            gameState.inventory.line--;
+                            gameState.lines.push({ from: gameState.connectingNode, to: clickedNode, pulseProgress: 0 });
                             gameState.connectingNode = null;
                         } else {
-                            alert('クラフト素材不足: 風のエレメント × 2 が必要です');
+                            alert('「マナライン」が足りません。[E]キーでクラフトしてください。');
                         }
                     }
                 }
             } else if (['collector', 'mixer', 'relay'].includes(gameState.selectedTool)) {
-                createNode(gameState.selectedTool, worldPos.x, worldPos.y);
+                if ((gameState.inventory[gameState.selectedTool] || 0) > 0) {
+                    if (createNode(gameState.selectedTool, worldPos.x, worldPos.y)) {
+                        gameState.inventory[gameState.selectedTool]--;
+                    }
+                } else {
+                    alert('指定の施設がインベントリにありません。');
+                }
             } else if (gameState.selectedTool === 'delete' && clickedNode && clickedNode.type !== 'core') {
                 gameState.nodes = gameState.nodes.filter(n => n !== clickedNode);
                 gameState.lines = gameState.lines.filter(l => l.from !== clickedNode && l.to !== clickedNode);
-            } else if (clickedNode) {
-                document.getElementById('node-info').innerHTML = `
-                    <b>${clickedNode.name}</b><br>
-                    位置: (${Math.round(clickedNode.x)}, ${Math.round(clickedNode.y)})<br>
-                    駆動マナ: ${clickedNode.manaCost} Mana/s
-                    ${clickedNode.harvestType ? `<br>採取対象: ${RESOURCE_TYPES[clickedNode.harvestType].name}` : ''}
-                `;
             }
         });
 
-        // ホイールズーム
-        canvas.addEventListener('wheel', (e) => {
-            e.preventDefault();
-            const zoomFactor = 1.1;
-            if (e.deltaY < 0) {
-                gameState.camera.zoom = Math.min(2.5, gameState.camera.zoom * zoomFactor);
-            } else {
-                gameState.camera.zoom = Math.max(0.4, gameState.camera.zoom / zoomFactor);
-            }
-        }, { passive: false });
-
-        // キーボード操作（WASD移動）
-        window.addEventListener('keydown', (e) => {
-            gameState.keysPressed[e.key.toLowerCase()] = true;
-
-            if (e.key === '1') selectTool('line');
-            if (e.key === '2') selectTool('collector');
-            if (e.key === '3') selectTool('mixer');
-            if (e.key === '4') selectTool('relay');
-            if (e.key.toLowerCase() === 'r') selectTool('delete');
-            if (e.key.toLowerCase() === 'c') selectTool('line');
-            if (e.key.toLowerCase() === 'm') toggleSymmetry();
-            if (e.key.toLowerCase() === 'g') toggleGrid();
-        });
-
-        window.addEventListener('keyup', (e) => {
-            gameState.keysPressed[e.key.toLowerCase()] = false;
-        });
-
-        function handlePlayerMovement() {
-            let dx = 0;
-            let dy = 0;
-
-            if (gameState.keysPressed['w']) dy -= 1;
-            if (gameState.keysPressed['s']) dy += 1;
-            if (gameState.keysPressed['a']) dx -= 1;
-            if (gameState.keysPressed['d']) dx += 1;
-
-            if (dx !== 0 && dy !== 0) {
-                dx *= 0.7071;
-                dy *= 0.7071;
-            }
-
-            gameState.player.x += dx * gameState.player.speed;
-            gameState.player.y += dy * gameState.player.speed;
-
-            // カメラ追従
-            gameState.camera.x = -gameState.player.x;
-            gameState.camera.y = -gameState.player.y;
-        }
-
-        // 施設・採取陣の設置
         function createNode(type, x, y) {
-            let harvestType = null;
+            const cx = Math.floor(x / CHUNK_PX);
+            const cy = Math.floor(y / CHUNK_PX);
+            const chunk = getOrCreateChunk(cx, cy);
+            const tx = Math.floor((x - cx * CHUNK_PX) / TILE_SIZE);
+            const ty = Math.floor((y - cy * CHUNK_PX) / TILE_SIZE);
+            const tileType = (chunk[ty] && chunk[ty][tx] !== undefined) ? chunk[ty][tx] : 0;
 
+            let isManaCollector = false;
             if (type === 'collector') {
-                const res = gameState.resourceNodes.find(r => Math.hypot(r.x - x, r.y - y) < r.radius);
-                if (!res) {
-                    alert('採取陣は自然地形（水脈・火山・山脈・風の谷）の上にしか設置できません！');
-                    return;
+                if (tileType === 5) {
+                    isManaCollector = true;
                 }
-                harvestType = res.type;
             }
 
-            let costCheck = false;
-            let nodeData = { x, y, type, harvestType };
+            let nodeData = {
+                id: Date.now(),
+                x, y, type,
+                isManaCollector: isManaCollector,
+                manaGen: isManaCollector ? 5.0 : 0,
+                manaCost: isManaCollector ? 0 : 1,
+                name: isManaCollector ? 'マナ採取陣 (霊脈)' : 'エレメント採取陣'
+            };
 
-            if (type === 'collector' && gameState.elements.Earth >= 5 && gameState.elements.Fire >= 2) {
-                gameState.elements.Earth -= 5;
-                gameState.elements.Fire -= 2;
-                nodeData.name = `採取陣 (${RESOURCE_TYPES[harvestType].name})`;
-                nodeData.manaCost = 2;
-                costCheck = true;
-            } else if (type === 'mixer' && gameState.elements.Water >= 10 && gameState.elements.Lava >= 5) {
-                gameState.elements.Water -= 10;
-                gameState.elements.Lava -= 5;
-                nodeData.name = '調合陣 Mk-1';
-                nodeData.manaCost = 4;
-                costCheck = true;
-            } else if (type === 'relay' && gameState.elements.Earth >= 3 && gameState.elements.Water >= 3) {
-                gameState.elements.Earth -= 3;
-                gameState.elements.Water -= 3;
-                nodeData.name = '中継陣';
-                nodeData.manaCost = 1;
-                costCheck = true;
-            }
-
-            if (costCheck) {
-                nodeData.id = Date.now();
-                gameState.nodes.push(nodeData);
-            } else {
-                alert('クラフト素材（エレメント）が不足しています。');
-            }
+            gameState.nodes.push(nodeData);
+            return true;
         }
 
-        // --- ループ & 描画処理 ---
+        // --- ループ & マナ計算処理 ---
         function updateGame() {
             handlePlayerMovement();
 
-            // 自動汲み出し
+            let baseManaGen = 1.0;
+            let collectorManaGen = 0;
+            let totalManaCost = 0;
+
             gameState.nodes.forEach(n => {
-                if (n.type === 'collector' && n.harvestType) {
-                    gameState.elements[n.harvestType] = (gameState.elements[n.harvestType] || 0) + (0.1 / 60);
-                }
+                if (n.isManaCollector) collectorManaGen += n.manaGen;
+                else totalManaCost += (n.manaCost || 0);
             });
 
-            // マナ消費・更新
-            let totalManaCost = gameState.nodes.reduce((sum, n) => sum + (n.manaCost || 0), 0);
             totalManaCost += gameState.lines.length * 0.1;
-            
-            gameState.manaRate = 5 - totalManaCost;
+
+            gameState.manaRate = baseManaGen + collectorManaGen - totalManaCost;
             gameState.mana = Math.min(gameState.maxMana, Math.max(0, gameState.mana + gameState.manaRate / 60));
 
-            // UI更新
-            document.getElementById('mana-display').innerText = `${Math.floor(gameState.mana)} / ${gameState.maxMana} (${gameState.manaRate >= 0 ? '+' : ''}${gameState.manaRate.toFixed(1)}/s)`;
-            
-            document.getElementById('element-display').innerHTML = `
-                🜄 水: ${Math.floor(gameState.elements.Water)}<br>
-                🜂 火: ${Math.floor(gameState.elements.Fire)}<br>
-                🜃 土: ${Math.floor(gameState.elements.Earth)}<br>
-                🜁 風: ${Math.floor(gameState.elements.Wind)}<br>
-                🌋 溶岩: ${Math.floor(gameState.elements.Lava)}
-            `;
+            gameState.lines.forEach(l => {
+                l.pulseProgress = ((l.pulseProgress || 0) + 0.02) % 1.0;
+            });
 
-            const simScore = Math.min(10000, gameState.nodes.length * 250 * gameState.symmetryAxes);
-            document.getElementById('score-display').innerText = `${simScore} pt (Rank ${simScore > 8000 ? 'S' : simScore > 5000 ? 'A' : 'B'})`;
+            document.getElementById('mana-display').innerText = 
+                `${Math.floor(gameState.mana)} / ${gameState.maxMana} (${gameState.manaRate >= 0 ? '+' : ''}${gameState.manaRate.toFixed(1)}/s)`;
+            
+            document.getElementById('element-display').innerHTML = Object.entries(gameState.elements)
+                .map(([k, v]) => `${k}: ${Math.floor(v)}`).join('<br>');
         }
 
+        // 座標が探索済みかチェック
+        function isExplored(wx, wy) {
+            const tx = Math.floor(wx / TILE_SIZE);
+            const ty = Math.floor(wy / TILE_SIZE);
+            return gameState.exploredTiles.has(`${tx}_${ty}`);
+        }
+
+        // --- メインキャンバス描画 ---
         function renderMainCanvas() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -425,161 +519,182 @@
             ctx.scale(gameState.camera.zoom, gameState.camera.zoom);
             ctx.translate(gameState.camera.x, gameState.camera.y);
 
-            // 1. グリッド
-            ctx.strokeStyle = '#222230';
-            ctx.lineWidth = 1 / gameState.camera.zoom;
-            if (gameState.gridType === 'Cartesian') {
-                for (let x = -2000; x <= 2000; x += 50) {
-                    ctx.beginPath(); ctx.moveTo(x, -2000); ctx.lineTo(x, 2000); ctx.stroke();
-                }
-                for (let y = -2000; y <= 2000; y += 50) {
-                    ctx.beginPath(); ctx.moveTo(-2000, y); ctx.lineTo(2000, y); ctx.stroke();
-                }
-            } else {
-                for (let r = 50; r <= 2000; r += 80) {
-                    ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.stroke();
+            const viewW = canvas.width / gameState.camera.zoom;
+            const viewH = canvas.height / gameState.camera.zoom;
+            const minCx = Math.floor((gameState.player.x - viewW / 2) / CHUNK_PX);
+            const maxCx = Math.floor((gameState.player.x + viewW / 2) / CHUNK_PX);
+            const minCy = Math.floor((gameState.player.y - viewH / 2) / CHUNK_PX);
+            const maxCy = Math.floor((gameState.player.y + viewH / 2) / CHUNK_PX);
+
+            // 1. 地形タイルの描画
+            for (let cx = minCx; cx <= maxCx; cx++) {
+                for (let cy = minCy; cy <= maxCy; cy++) {
+                    const chunk = getOrCreateChunk(cx, cy);
+                    for (let ty = 0; ty < CHUNK_SIZE; ty++) {
+                        for (let tx = 0; tx < CHUNK_SIZE; tx++) {
+                            const wx = (cx * CHUNK_SIZE + tx) * TILE_SIZE;
+                            const wy = (cy * CHUNK_SIZE + ty) * TILE_SIZE;
+
+                            if (isExplored(wx, wy)) {
+                                const tile = TILE_TYPES[chunk[ty][tx]];
+                                ctx.fillStyle = tile.color;
+                                ctx.fillRect(wx, wy, TILE_SIZE, TILE_SIZE);
+                                ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+                                ctx.strokeRect(wx, wy, TILE_SIZE, TILE_SIZE);
+
+                                if (tile.symbol) {
+                                    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+                                    ctx.font = '12px sans-serif';
+                                    ctx.textAlign = 'center';
+                                    ctx.textBaseline = 'middle';
+                                    ctx.fillText(tile.symbol, wx + TILE_SIZE/2, wy + TILE_SIZE/2);
+                                }
+                            } else {
+                                // 未探索領域（黒）
+                                ctx.fillStyle = '#050508';
+                                ctx.fillRect(wx, wy, TILE_SIZE, TILE_SIZE);
+                            }
+                        }
+                    }
                 }
             }
 
-            // 2. 自然地形
-            gameState.resourceNodes.forEach(r => {
-                const conf = RESOURCE_TYPES[r.type];
-                ctx.beginPath();
-                ctx.arc(r.x, r.y, r.radius, 0, Math.PI * 2);
-                ctx.fillStyle = conf.color;
-                ctx.fill();
-                ctx.strokeStyle = conf.borderColor;
-                ctx.lineWidth = 2;
-                ctx.stroke();
-
-                ctx.fillStyle = '#fff';
-                ctx.font = '16px sans-serif';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText(conf.symbol, r.x, r.y);
-            });
-
-            // 3. マナライン
-            ctx.strokeStyle = '#00d2ff';
-            ctx.lineWidth = 2 / gameState.camera.zoom;
+            // 2. マナライン描画（両端が探索済みの場合のみ）
             gameState.lines.forEach(l => {
-                ctx.beginPath();
-                ctx.moveTo(l.from.x, l.from.y);
-                ctx.lineTo(l.to.x, l.to.y);
-                ctx.stroke();
-            });
+                if (isExplored(l.from.x, l.from.y) || isExplored(l.to.x, l.to.y)) {
+                    ctx.beginPath();
+                    ctx.moveTo(l.from.x, l.from.y);
+                    ctx.lineTo(l.to.x, l.to.y);
+                    ctx.strokeStyle = 'rgba(0, 210, 255, 0.4)';
+                    ctx.lineWidth = 3;
+                    ctx.stroke();
 
-            // 4. 施設ノード
-            const time = Date.now() * 0.003;
-            gameState.nodes.forEach(n => {
-                ctx.beginPath();
-                ctx.arc(n.x, n.y, n.type === 'core' ? 20 : 14, 0, Math.PI * 2);
-                ctx.fillStyle = n.type === 'core' ? '#ffaa00' : n.type === 'collector' ? '#4caf50' : n.type === 'mixer' ? '#e91e63' : '#9c27b0';
-                ctx.fill();
-                ctx.strokeStyle = '#fff';
-                ctx.lineWidth = 1.5 / gameState.camera.zoom;
-                ctx.stroke();
-
-                if (n.type === 'collector' && n.harvestType) {
-                    const offsetY = Math.sin(time) * 5 - 22;
-                    ctx.fillStyle = '#fff';
-                    ctx.font = '14px sans-serif';
-                    ctx.textAlign = 'center';
-                    ctx.fillText(RESOURCE_TYPES[n.harvestType].symbol, n.x, n.y + offsetY);
+                    const px = l.from.x + (l.to.x - l.from.x) * l.pulseProgress;
+                    const py = l.from.y + (l.to.y - l.from.y) * l.pulseProgress;
+                    ctx.beginPath();
+                    ctx.arc(px, py, 4, 0, Math.PI * 2);
+                    ctx.fillStyle = '#00ffff';
+                    ctx.fill();
                 }
             });
 
-            // 5. プレイヤー & リーチ範囲
-            const px = gameState.player.x;
-            const py = gameState.player.y;
+            // 3. ノード描画（探索済みの場所にのみ）
+            gameState.nodes.forEach(n => {
+                if (isExplored(n.x, n.y)) {
+                    ctx.beginPath();
+                    ctx.arc(n.x, n.y, n.type === 'core' ? 20 : 14, 0, Math.PI * 2);
+                    ctx.fillStyle = n.type === 'core' ? '#ffaa00' : n.isManaCollector ? '#00ffff' : n.type === 'collector' ? '#4caf50' : '#e91e63';
+                    ctx.fill();
+                    ctx.strokeStyle = '#fff';
+                    ctx.stroke();
+                }
+            });
 
-            ctx.beginPath();
-            ctx.arc(px, py, gameState.player.reachRadius, 0, Math.PI * 2);
-            ctx.strokeStyle = 'rgba(0, 210, 255, 0.4)';
-            ctx.lineWidth = 1.5;
-            ctx.setLineDash([6, 6]);
-            ctx.stroke();
-            ctx.setLineDash([]);
-
-            ctx.beginPath();
-            ctx.arc(px, py, 10, 0, Math.PI * 2);
-            ctx.fillStyle = '#00d2ff';
-            ctx.fill();
-            ctx.strokeStyle = '#ffffff';
-            ctx.lineWidth = 2;
-            ctx.stroke();
+            // 4. プレイヤー
+            const p = gameState.player;
+            const frameX = Math.floor(p.animFrame) * 32;
+            const frameY = p.facing * 32;
+            ctx.drawImage(playerSprite, frameX, frameY, 32, 32, p.x - 16, p.y - 16, 32, 32);
 
             ctx.restore();
         }
 
-        // --- ミニマップ描画処理 ---
+        // --- ミニマップ描画（フォグ・オブ・ウォー対応） ---
         function renderMinimap() {
             const mw = minimapCanvas.width;
             const mh = minimapCanvas.height;
-            const scale = mw / gameState.worldSize; // ワールド座標 -> ミニマップ座標の縮尺
+            const scale = mw / WORLD_VIEW_SIZE;
 
-            minimapCtx.clearRect(0, 0, mw, mh);
+            // 暗い背景（未探査エリア）で全クリア
+            minimapCtx.fillStyle = '#050508';
+            minimapCtx.fillRect(0, 0, mw, mh);
 
-            // ワールド中心 (0,0) を ミニマップの中心 (mw/2, mh/2) にマッピング
             function toMiniX(wx) { return wx * scale + mw / 2; }
             function toMiniY(wy) { return wy * scale + mh / 2; }
 
-            // 1. 自然地形を描画
-            gameState.resourceNodes.forEach(r => {
-                const mx = toMiniX(r.x);
-                const my = toMiniY(r.y);
-                const mr = Math.max(2, r.radius * scale);
-                minimapCtx.beginPath();
-                minimapCtx.arc(mx, my, mr, 0, Math.PI * 2);
-                minimapCtx.fillStyle = RESOURCE_TYPES[r.type].miniColor;
-                minimapCtx.globalAlpha = 0.6;
-                minimapCtx.fill();
-                minimapCtx.globalAlpha = 1.0;
+            // 1. 探索済み地形をミニマップに描画
+            const step = TILE_SIZE;
+            const halfWorld = WORLD_VIEW_SIZE / 2;
+            
+            gameState.exploredTiles.forEach(tileKey => {
+                const [tx, ty] = tileKey.split('_').map(Number);
+                const wx = tx * TILE_SIZE;
+                const wy = ty * TILE_SIZE;
+
+                if (Math.abs(wx) < halfWorld && Math.abs(wy) < halfWorld) {
+                    const cx = Math.floor(wx / CHUNK_PX);
+                    const cy = Math.floor(wy / CHUNK_PX);
+                    const chunk = getOrCreateChunk(cx, cy);
+                    const localTx = Math.floor((wx - cx * CHUNK_PX) / TILE_SIZE);
+                    const localTy = Math.floor((wy - cy * CHUNK_PX) / TILE_SIZE);
+
+                    const tileType = (chunk[localTy] && chunk[localTy][localTx] !== undefined) ? chunk[localTy][localTx] : 0;
+                    const tile = TILE_TYPES[tileType];
+
+                    minimapCtx.fillStyle = tile.miniColor || '#222233';
+                    const mx = toMiniX(wx);
+                    const my = toMiniY(wy);
+                    const size = Math.max(1.5, TILE_SIZE * scale);
+                    minimapCtx.fillRect(mx, my, size, size);
+                }
             });
 
-            // 2. マナラインを描画
+            // 2. マナライン描画（探索済みのもののみ）
             minimapCtx.strokeStyle = '#00d2ff';
             minimapCtx.lineWidth = 1;
             gameState.lines.forEach(l => {
-                minimapCtx.beginPath();
-                minimapCtx.moveTo(toMiniX(l.from.x), toMiniY(l.from.y));
-                minimapCtx.lineTo(toMiniX(l.to.x), toMiniY(l.to.y));
-                minimapCtx.stroke();
+                if (isExplored(l.from.x, l.from.y) || isExplored(l.to.x, l.to.y)) {
+                    minimapCtx.beginPath();
+                    minimapCtx.moveTo(toMiniX(l.from.x), toMiniY(l.from.y));
+                    minimapCtx.lineTo(toMiniX(l.to.x), toMiniY(l.to.y));
+                    minimapCtx.stroke();
+                }
             });
 
-            // 3. 施設ノードを描画
+            // 3. ノード描画（探索済みのもののみ）
             gameState.nodes.forEach(n => {
-                const mx = toMiniX(n.x);
-                const my = toMiniY(n.y);
-                minimapCtx.beginPath();
-                minimapCtx.arc(mx, my, n.type === 'core' ? 4 : 2.5, 0, Math.PI * 2);
-                minimapCtx.fillStyle = n.type === 'core' ? '#ffaa00' : n.type === 'collector' ? '#4caf50' : n.type === 'mixer' ? '#e91e63' : '#9c27b0';
-                minimapCtx.fill();
+                if (isExplored(n.x, n.y)) {
+                    minimapCtx.beginPath();
+                    minimapCtx.arc(toMiniX(n.x), toMiniY(n.y), n.type === 'core' ? 4 : 2.5, 0, Math.PI * 2);
+                    minimapCtx.fillStyle = n.type === 'core' ? '#ffaa00' : n.isManaCollector ? '#00ffff' : '#4caf50';
+                    minimapCtx.fill();
+                }
             });
 
-            // 4. 現在のカメラ視野領域（画角）を表示
-            const viewWidth = canvas.width / gameState.camera.zoom;
-            const viewHeight = canvas.height / gameState.camera.zoom;
-            const viewMinX = toMiniX(gameState.player.x - viewWidth / 2);
-            const viewMinY = toMiniY(gameState.player.y - viewHeight / 2);
-            const viewMiniW = viewWidth * scale;
-            const viewMiniH = viewHeight * scale;
+            // 4. カメラ視界領域枠
+            const viewW = (canvas.width / gameState.camera.zoom) * scale;
+            const viewH = (canvas.height / gameState.camera.zoom) * scale;
+            const vx = toMiniX(gameState.player.x) - viewW / 2;
+            const vy = toMiniY(gameState.player.y) - viewH / 2;
 
-            minimapCtx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+            minimapCtx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
             minimapCtx.lineWidth = 1;
-            minimapCtx.strokeRect(viewMinX, viewMinY, viewMiniW, viewMiniH);
+            minimapCtx.strokeRect(vx, vy, viewW, viewH);
 
-            // 5. プレイヤー位置（点）を描画
-            const pmx = toMiniX(gameState.player.x);
-            const pmy = toMiniY(gameState.player.y);
+            // 5. プレイヤー位置
             minimapCtx.beginPath();
-            minimapCtx.arc(pmx, pmy, 3.5, 0, Math.PI * 2);
+            minimapCtx.arc(toMiniX(gameState.player.x), toMiniY(gameState.player.y), 3.5, 0, Math.PI * 2);
             minimapCtx.fillStyle = '#00d2ff';
             minimapCtx.fill();
             minimapCtx.strokeStyle = '#ffffff';
-            minimapCtx.lineWidth = 1;
             minimapCtx.stroke();
         }
+
+        // 入力キー定義
+        window.addEventListener('keydown', (e) => {
+            const k = e.key.toLowerCase();
+            gameState.keysPressed[k] = true;
+            if (k === 'e') toggleInventory();
+            if (k === '1') selectTool('line');
+            if (k === '2') selectTool('collector');
+            if (k === '3') selectTool('mixer');
+            if (k === '4') selectTool('relay');
+            if (k === 'r') selectTool('delete');
+        });
+        window.addEventListener('keyup', (e) => { gameState.keysPressed[e.key.toLowerCase()] = false; });
+
+        // 初期スポーン位置（(0,0)周辺）を探索済みに設定
+        updateExploration();
 
         function render() {
             renderMainCanvas();
